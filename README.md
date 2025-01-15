@@ -355,3 +355,87 @@ generate_heatmap(outdeg_combined_df_reorder_filtered, "BuGn")
 ## Regulon Analysis
 
 This section used pySCENIC python package for analysis, and later AUC score is loaded into seurat object to find DE regulon. Refer to https://github.com/aertslab/pySCENIC, https://bookdown.org/ytliu13207/SingleCellMultiOmicsDataAnalysis/scenic-differential-regulons.html
+
+Firstly, generate loom from seurat for the input to pySCENIC
+
+```r
+library(Seurat)
+library(SeuratDisk)
+library(loomR)
+
+lipo_subset <- subset(lipo,idents=c("alpha","beta","delta","pp"))
+lipo.endocrine.loom <- as.loom(lipo_subset,filename='lipo.endocrine.loom',verbose=FALSE)
+lipo.endocrine.loom$close_all()
+
+```
+Secondly, Define and regulons and calculate the cellular regulon enrichment score (AUC).
+
+```bash
+
+## first, get the co-expression modules
+pyscenic grn \
+    --num_workers 63 \
+    -o /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo.endocrine.adj.tsv \
+    /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo.endocrine.loom\
+    /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/allTFs_hg38.txt
+
+## Second, filter modules for targets with cis regulatory motifs. (TF binding motifs)
+pyscenic ctx \
+    /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo.endocrine.adj.tsv \
+    /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/hg38_500bp_up_100bp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather \
+    /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/hg38_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather \
+    --annotations_fname /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl \
+    --expression_mtx_fname /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo.endocrine.loom \
+    --mode "dask_multiprocessing" \
+    --output /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo_integrated_endocrine_regulons.csv \
+    --num_workers 51
+
+## Calculate the cellular regulon enrichment matrix
+pyscenic aucell \
+    --num_workers 51 \
+    -o /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo_integrated_endocrine_SCENIC.loom \
+    /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo.endocrine.loom \
+    /gpfs/home/lg23w/lipoglucotoxicity/SCENIC/lipo_integrated_endocrine_regulons.csv
+
+## Create a Scope-compatible loom file, add_visualization.py and export_to_loom.py are neeed, which can be found in the Regulon_Analysis folder
+python add_visualization.py \
+    --loom_input lipo_integrated_endocrine_SCENIC.loom \
+    --loom_output lipo_visualization.loom \
+    --num_workers 25
+
+```
+After getting the AUC for each cells, let us import the data back to Seurat and using `FindMarkers` to find the differentially expressed regulons.
+
+```r
+library(SCENIC)
+library(SCopeLoomR)
+
+lipo_subset <- subset(lipo,idents=c("alpha","beta","delta","pp"))
+
+## load the AUC score
+loom <- open_loom("lipo_visualization.loom") # the scope-compatile loom is not necessary for the downstream analysis, output from aucell is enough.
+regulons_incidMat <- get_regulons(loom,column.attr.name='Regulons')
+regulons <- regulonsToGeneLists(regulons_incidMat)
+regulonsAUC <- get_regulons_AUC(loom,column.attr.name='RegulonsAUC')
+AUCmat <- AUCell::getAUC(regulonsAUC)
+rownames(AUCmat) <- gsub("[_(+)]", "", rownames(AUCmat))
+lipo_subset[['AUC']] <- CreateAssayObject(data = AUCmat)
+
+## identify the DE regulons
+DefaultAssay(lipo_subset) <- "AUC"
+lipo_subset$cell.type.condition=paste(lipo_subset$cell.type.final,lipo_subset$condition,sep="_")
+
+cell_types=c("alpha","beta","delta","pp")
+DE_regulon=list()
+for (celltype in cell_types){
+  ident_1 <- paste0(cell_type, "_GL")
+  ident_2 <- paste0(cell_type, "_Ctrl")
+  DE_regulon[[celltype]] <- FindMarkers(lipo_subset,
+                          ident.1=ident_1,ident.2=ident_2,
+                          verbose=FALSE,logfc.threshold=0)
+}
+
+```
+THe conventional post-pySCENIC analysis was also done in python following the tutorial https://pyscenic.readthedocs.io/en/latest/tutorial.html,
+the code is included in the *Regulon_Analysis* folder in file *post_pyscenic.ipynb*.
+
