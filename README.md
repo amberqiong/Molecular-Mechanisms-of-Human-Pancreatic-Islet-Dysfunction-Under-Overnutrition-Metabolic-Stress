@@ -10,6 +10,39 @@ Before making the actual analysis, begin with ambient mRNA decontamination
 
 ## Integration and cell calling
 
+```r
+library(dplyr)
+library(Seurat)
+library(ggplot2)
+
+## features dot plot
+Idents(lipo) <- factor(x=Idents(lipoglucotoxicity),levels=rev(c("alpha","beta","delta","epsilon","pp","ductal","acinar","fibroblast","endothelial","immune","doublets","unknown")))
+
+features=rev(c("GCG","INS","SST","GHRL","PPY","CFTR","CPA2","SPARC","VWF","PTPRC"))
+DotPlot(lipoglucotoxicity,features = features)
+
+## color code for different cell types
+colors <- c("#4682B4","#CD5C5C", "#5F9EA0", "firebrick","#87CEEB", "#FF8C00", "#48D1CC","#FFD700", "#7B68EE","#FF6347","darkgrey")
+
+DimPlot(lipo, reduction = "umap.cca",cols = colors,label = TRUE)+labs(x="UMAP1",y="UMAP2")
+
+## cell percentile and plotting
+
+counts_data=lipo@meta.data %>%
+   group_by(donor,condition, cell.type.final) %>%
+   summarize(count=n()) %>%
+   ungroup() %>%
+   filter(cell.type.final != "doublets")
+
+ggplot(counts_data,aes(x=condition,y=count,fill=cell.type.final))+
+  facet_grid(rows=vars(donor))+geom_bar(position = "fill",stat = "identity")+
+  scale_fill_manual("cell.type.final",values = c("alpha"="#DE8C00",
+  "beta"="#B79F00","delta"="#7CAE00","epsilon"="#00B4F0","pp"="#F564E3"))+
+  theme_classic()+
+  geom_text(aes(label=count),position=position_fill(vjust = 0.5),size=3)+coord_flip()
+
+```
+
 ## DEG Analysis
 DEG analysis for all cell types comparing the conditions `GL` vs `Ctrl`. The `FindMarkers` function from the Seurat package is used for differential expression analysis, refer to the [Seurat Differential Expression Vignette](https://satijalab.org/seurat/articles/de_vignette).
 
