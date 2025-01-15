@@ -13,7 +13,7 @@ Before making the actual analysis, begin with ambient mRNA decontamination
 ## DEG Analysis
 DEG analysis for all cell types comparing the conditions `GL` vs `Ctrl`. The `FindMarkers` function from the Seurat package is used for differential expression analysis, refer to the [Seurat Differential Expression Vignette](https://satijalab.org/seurat/articles/de_vignette).
 
-```
+```r
 library(Seurat)
 
 lipo$celltype.condition=paste(lipo$cell.type.final,lipo$condition,sep="_")
@@ -51,7 +51,7 @@ Then,
 * calculate DEG number of each cell type
 * identify the unique DEG or common shared DEG across the cell types
 
-```
+```r
 DEG_1.2=list()
 
 for (j in seq_along(DEG_lipo)){
@@ -137,7 +137,7 @@ ggplot(df, aes(x = Celltype_N, y = Number, fill = Direction)) +
 ## Augur Analysis
 Augur is a R package to estimate the cell sensitivity to the env disturbation, for the details please refer to https://github.com/neurorestore/Augur
 
-```
+```r
 library(tidyverse)
 library(Seurat)
 library(Augur)
@@ -159,7 +159,7 @@ plot_umap(lipo.augur, lipo,reduction = "umap.cca",cell_type_col = "cell.type.fin
 
 ## Pathway enrichment
 
-```
+```r
 library(clusterProfiler)
 library(enrichplot)
 library(ggplot2)
@@ -190,7 +190,7 @@ down_GO_results <- lapply(down_genes, function(gene_list) {
 
 The `AddModuleScore` function is used to calculate the average expression level of UPR pathways in each cells, refer to https://satijalab.org/seurat/reference/addmodulescore
 
-```
+```r
 library(Seurat)
 library(dplyr)
 library(tibble)
@@ -244,7 +244,8 @@ dev.off()
 CellChat R package is used for this section, refer to https://github.com/jinworks/CellChat
 
 First, generate the cellchat for downstream visualization
-```
+
+```r
 library(CellChat)
 library(patchwork)
 library(Seurat)
@@ -302,7 +303,7 @@ cellchat <- mergeCellChat(object.list,add.names = names(object.list))
 ```
 Downstream visualization follow the CellChat tutorial, except the heatmap of outgoing and incoming signaling pattern, which is modified based on the original code of `netAnalysis_signalingRole_heatmap`.
 
-```
+```r
 ## Process in-degree and out-degree for both Ctrl and GL
 process_degrees <- function(object.list, degree_type, cell_types) {
   degrees <- lapply(object.list@netP$centr, function(signaling) {
