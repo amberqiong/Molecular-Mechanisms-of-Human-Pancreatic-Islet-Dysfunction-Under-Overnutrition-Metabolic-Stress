@@ -690,3 +690,104 @@ for (celltype in cell_types){
 THe conventional post-pySCENIC analysis was also done in python following the tutorial https://pyscenic.readthedocs.io/en/latest/tutorial.html,
 the code is included in the *Regulon_Analysis* folder in file *post_pyscenic.ipynb*.
 
+## Pseudotime analysis
+
+`slingshot` was used for pseudotime analysis, modified from tutorial https://kstreet13.github.io/bioc2020trajectories/articles/workshopTrajectories.html 
+and tutorial https://hectorrdb.github.io/condimentsPaper/articles/TGFB.html
+
+``` r
+library(slingshot)
+library(RColorBrewer)
+library(SingleCellExperiment)
+library(scales)
+library(viridis)
+library(UpSetR)
+library(pheatmap)
+library(msigdbr)
+library(fgsea)
+library(knitr)
+library(ggplot2)
+library(gridExtra)
+library(condiments)
+library(dplyr)
+library(tradeSeq)
+library(cowplot)
+
+# Selecting beta cells
+Idents(lipo)=lipo$cell.type.final
+beta = subset(lipo,idents="beta")
+
+# Converting to singleCellExperiment
+beta_sce <- as.SingleCellExperiment(beta, assay = "RNA")
+beta_sce = slingshot(beta_sce,reducedDim='UMAP.CCA', clusterLabels=colData(beta_sce)$condition,start.clus="Ctrl", approx_points=150)
+
+# Differnetial topology test
+set.seed(821)
+library(tradeSeq)
+BPPARAM <- BiocParallel::MulticoreParam(workers = 20)
+
+## fit negative binomial GAM
+## filter genes to have minimum shared counts of 20, and minimum expressed in 3 cells, in line with scVelo default, and to improve fitGAM execusion speed
+gene_cells <- rowSums(counts(beta_sce)!=0)
+beta_sce_filtered <- beta_sce[gene_cells > 3,]  
+gene_sums <- rowSums(counts(beta_sce_filtered))
+beta_sce_filtered <-  beta_sce_filtered[gene_sums > 20,]
+
+icMat <- evaluateK(counts=beta_sce_filtered,
+                   nGenes = 500,
+                   k = 3:10, 
+                   conditions=factor(beta_sce$condition),
+                   parallel=TRUE)
+
+plot_evalutateK_results(icMat,k=3:10)
+
+beta_sce_filtered <- fitGAM(beta_sce_filtered, nknots=7, parallel=TRUE) 
+
+
+## Differential expression along pseudotime
+ATres <- associationTest(beta_sce_filtered) # testing whether the average gene expression is significantly changed along pseudotime
+ATres$p.adjust <- p.adjust(ATres$pvalue,"fdr")
+
+
+
+## Heatmaps of genes whose expression vary over pseudotime
+pseudotime_genes <- rownames(ATres)[
+  which((ATres$p.adjust < 0.01)  )
+]
+
+## based on mean smoother
+yhatSmooth <- 
+  predictSmooth(beta_sce_filtered, gene = pseudotime_genes, nPoints = 100, tidy = FALSE) %>%
+  log1p()
+yhatSmoothScaled <- t(apply(yhatSmooth,1, scales::rescale))
+
+heatSmooth <- pheatmap(yhatSmoothScaled,
+                       cluster_cols = FALSE,
+                       show_rownames = FALSE, 
+                       show_colnames = FALSE, 
+                       clustering_distance_rows="correlation",
+                       clustering_method="ward.D2",
+                       legend = TRUE
+)
+
+
+my_gene_col <- cutree(heatSmooth$tree_row, k=3)
+my_gene_col <- data.frame(my_gene_col)
+my_colour = list(
+  my_gene_col = brewer.pal(7,"Accent")[1:3]
+)
+
+
+pheatmap(yhatSmoothScaled,
+         cluster_cols = FALSE,
+         show_rownames = FALSE, 
+         show_colnames = FALSE, 
+         clustering_distance_rows="correlation",
+         clustering_method="ward.D2",
+         annotation_row=my_gene_col,
+         annotation_colors=my_colour,
+         annotation_names_row = FALSE,
+         legend = TRUE
+)
+```
+
