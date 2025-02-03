@@ -86,8 +86,6 @@ lipo$sex <- ifelse(lipo$donor%in%c("SAMN36705973","HP23166","HP23098"),"female",
 lipo[['percent.mt']] <- PercentageFeatureSet(lipo, pattern = '^MT-')
 lipo[['percent.mt']] <- PercentageFeatureSet(lipo, pattern = '^MT-')
 
-saveRDS(lipo,file="lipo.rds")
-
 ```
 
 ## Filtering, integration and cell calling
@@ -101,7 +99,7 @@ options(future.globals.maxSize = 1e9)
 
 lipo[["RNA"]] <- split(lipo[["RNA"]], f = lipo$sample)
 
-lipo=subset(lipo,subset=nFeature_RNA>200 & ncount_RNA <=10000 & percent.mt<=10)
+lipo <- subset(lipo,subset=nFeature_RNA>200 & ncount_RNA <=10000 & percent.mt<=10)
 
 lipo <- NormalizeData(lipo)
 lipo <- FindVariableFeatures(lipo)
@@ -232,6 +230,8 @@ DimPlot(lipo, reduction = "umap.cca", group.by="predicted.annotation.l1",label =
 lipo$cell.type <- as.character(lipo$cell.type)
 lipo$cell.type.final <- ifelse(lipo$predicted.annotation.l1=="epsilon","epsilon",lipo$cell.type) 
 DimPlot(lipo, reduction = "umap.cca", group.by="cell.type.final", label = TRUE, pt.size = 0.5) 
+
+save(lipo,file="lipo_integrated.rds")
 
 ## features dot plot
 Idents(lipo) <- factor(x=Idents(lipo),levels=rev(c("alpha","beta","delta","epsilon","pp","ductal","acinar","fibroblast","endothelial","immune","doublets","unknown")))
