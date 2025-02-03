@@ -4,19 +4,237 @@ This repository hosts the codes to generate analysis and figures for Molecular M
 
 ## Pre-processing
 
-Before making the actual analysis, begin with ambient mRNA decontamination
-
-## Filtering
-
-## Integration and cell calling
+Before making the actual analysis, begin with ambient mRNA decontamination by SoupX, Modified from https://github.com/Gaulton-Lab/HPAP-scRNA-seq/blob/main/HPAP-SoupX.R
 
 ```r
-library(dplyr)
 library(Seurat)
+library(dplyr)
+library(SoupX)
+library(Azimuth)
+library(SeuratData)
 library(ggplot2)
+library(patchwork)
+
+samples <- c('CITH107_Ctrl','CITH107_PA','HP22286_Ctrl','HP22286_PA', 'HP23098_Julia_Ctrl',
+              'HP23098_Julia_PA','HP23098_Snow_Ctrl','HP23098_Snow_PA','HP23166_Ctrl','HP23166_PA',
+              'SAMN32641505_Ctrl','SAMN32641505_PA','SAMN36705973_Ctrl','SAMN36705973_PA')
+
+sc_before_soupx_list <- list() # save pre SoupX seurat objects
+sc_after_soupx_list <- list() # save after SoupX seurat objects
+
+for (sample in samples){
+  # Load seurat objects, add sample predix to barcode 
+  sc_object <- readRDS(paste0(sample,'.rds'))
+  sc_object <- RenameCells(object=sc_object,add.cell.id=sample)
+  sc_before_soupx_list[[sample]] <-sc_object
+
+  DefaultAssay(sc_object) <- "RNA"
+
+  # Get raw counts (raw_feature_bc_matrix.h5) and filtered counts (from seurat)
+  toc <-GetAssayData(object=sc_object,assay="RNA",slot="counts")
+  tod <-Seurat::Read10X_h5(file.path(sample,"raw_feature_bc_matrix.h5"))
+  tod_1 <- tod[rownames(toc),] # common set
+
+  # Get metadata (UMAP and clusters)
+  metadata <- (cbind(as.data.frame(sc_object@reductions$umap@cell.embeddings),
+                     as.data.frame(Idents(sc_object))
+  ))
+  colnames(metadata) <- c('RD1','RD2','Cluster')
+
+  # Run SoupX
+  sc <- SoupChannel(tod_1,toc)
+  sc <- setDR(sc,metadata[colnames(sc$toc),c('RD1','RD2')])
+  sc <- setClusters(sc,setNames(metadata$Cluster,rownames(metadata)))
+  sc <- autoEstCont(sc)
+
+  # save ambient RNA contamination estimates
+  contamination_data <- sc$fit$dd[,c('gene', 'soupExp')]
+  colnames(contamination_data) <- c('gene', sample)
+  write.table(contamination_data, paste0(sample, '_gene_level_soup_exp.tsv'), sep ='\t', col.names = TRUE, row.names = FALSE, quote = FALSE)
+
+  # Stochastically adjusts counts while rounding to maintain overall contamination fraction while outputting integer counts 
+  out <- adjustCounts(sc, roundToInt=TRUE)
+
+  # Create new seurat object with corrected counts
+  sc_object_new <- CreateSeuratObject(out)
+  sc_object_new[['percent.mt']] <- PercentageFeatureSet(sc_object_new, pattern = '^MT-')
+  sc_object_new <- SCTransform(sc_object_new, vst.flavor = "v2", verbose = FALSE) 
+  sc_object_new <- RunPCA(sc_object_new, npcs=30) 
+  sc_object_new <- RunUMAP(sc_object_new,reduction="pca",dims=1:30,verbose=FALSE) 
+  sc_object_new <- FindNeighbors(sc_object_new,reduction = "pca", dims = 1:30, verbose = FALSE)
+  sc_object_new <- FindClusters(sc_object_new,resolution=1)
+  saveRDS(sc_object_new, file = paste0(sample, "_SoupX.rds"))
+
+  sc_after_soupx_list[[sample]] <- sc_object_new
+
+}
+
+# Create a merged Seurat object lipo from the individual sample post-SoupX Seurat objects
+
+lipo <- merge(
+  sc_after_soupx_list[[1]],  # The first Seurat object (base for merging)
+  y = sc_after_soupx_list[-1],  # All remaining Seurat objects
+  add.cell.ids = names(sc_after_soupx_list), 
+  project = "lipoglucotoxicity"
+)
+
+lipo$sample <- sub('_[^_]*$', '',rownames(lipo@meta.data))
+lipo$donor <- sub('_[^_]*$', '',lipo$sample)
+lipo$donor <- sub('_[^_]*$', '',lipo$donor)
+lipo$condition <- sub('.*_', '',lipo$sample)
+lipo$sex <- ifelse(lipo$donor%in%c("SAMN36705973","HP23166","HP23098"),"female","male")
+lipo[['percent.mt']] <- PercentageFeatureSet(lipo, pattern = '^MT-')
+lipo[['percent.mt']] <- PercentageFeatureSet(lipo, pattern = '^MT-')
+
+saveRDS(lipo,file="lipo.rds")
+
+```
+
+## Filtering, integration and cell calling
+
+Seurat tutorial is followed.
+
+```R
+library(Seurat)
+library(SeuratWrappers)
+options(future.globals.maxSize = 1e9)
+
+lipo[["RNA"]] <- split(lipo[["RNA"]], f = lipo$sample)
+
+lipo=subset(lipo,subset=nFeature_RNA>200 & ncount_RNA <=10000 & percent.mt<=10)
+
+lipo <- NormalizeData(lipo)
+lipo <- FindVariableFeatures(lipo)
+lipo <- ScaleData(lipo)
+lipo <- RunPCA(lipo)
+lipo <- FindNeighbors(lipo, dims = 1:30, reduction = "pca")
+lipo <- FindClusters(lipo, resolution = 2, cluster.name = "unintegrated_clusters")
+lipo <- RunUMAP(lipo, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+DimPlot(lipo, reduction = "umap.unintegrated", group.by = c("condition", "donor"))
+
+# Comparison between different integration method
+
+## cca
+lipo <- IntegrateLayers(
+  object = lipo, method = CCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.cca",
+  verbose = FALSE
+)
+lipo <- FindNeighbors(lipo, reduction = "integrated.cca", dims = 1:30)
+lipo <- FindClusters(lipo, resolution = 2, cluster.name = "cca_clusters")
+lipo <- RunUMAP(lipo, reduction = "integrated.cca", dims = 1:30, reduction.name = "umap.cca")
+
+DimPlot(
+  lipo,
+  reduction = "umap.cca",
+  group.by = c("condition", "donor", "cca_clusters"),
+  label.size = 2
+)
+
+## rpca
+
+lipo <- IntegrateLayers(
+  object = lipo, method = RPCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.rpca",
+  verbose = FALSE
+)
+lipo <- FindNeighbors(lipo, reduction = "integrated.rpca", dims = 1:30)
+lipo <- FindClusters(lipo, resolution = 2, cluster.name = "rpca_clusters")
+lipo <- RunUMAP(lipo, reduction = "integrated.rpca", dims = 1:30, reduction.name = "umap.rpca")
+
+DimPlot(
+  lipo,
+  reduction = "umap.rpca",
+  group.by = c("condition", "donor", "rpca_clusters"),
+  label.size = 2
+)
+
+## harmony
+lipo <- IntegrateLayers(
+  object = lipo, method = HarmonyIntegration,
+  orig.reduction = "pca", new.reduction = "harmony",
+  verbose = FALSE
+)
+
+lipo <- FindNeighbors(lipo, reduction = "harmony", dims = 1:30)
+lipo <- FindClusters(lipo, resolution = 2, cluster.name = "harmony_clusters")
+lipo <- RunUMAP(lipo, reduction = "harmony", dims = 1:30, reduction.name = "umap.harmony")
+
+DimPlot(
+  lipo,
+  reduction = "umap.harmony",
+  group.by = c("condition", "donor", "harmony_clusters"),
+  label.size = 2
+)
+
+## mnn
+
+lipo <- IntegrateLayers(
+  object = lipo, method = FastMNNIntegration,
+  orig.reduction = "pca", new.reduction = "harmony",
+  verbose = FALSE
+)
+
+lipo <- FindNeighbors(lipo, reduction = "integrated.mnn", dims = 1:30)
+lipo <- FindClusters(lipo, resolution = 2, cluster.name = "mnn_clusters")
+lipo <- RunUMAP(lipo, reduction = "integrated.mnn", dims = 1:30, reduction.name = "umap.mnn")
+
+DimPlot(
+  lipo,
+  reduction = "umap.mnn",
+  group.by = c("condition", "donor", "mnn_clusters"),
+  label.size = 2
+)
+
+features=c("GCG", "INS", "SST", "GHRL","PPY","CFTR","CPA2","SPARC", "VWF","PTPRC","BRCA1")
+reductions=c("umap.cca","umap.rpca","umap.harmony","umap.mnn")
+DefaultAssay(lipo) = "SCT"
+
+pdf("FeaturePlots.pdf")
+for (reduction in reductions){
+  plot <- FeaturePlot(lipo, features = features, cols = c("lightgrey", "red"), reduction=reduction)+
+  plot_annotation(title=paste("Reduction",reduction))
+  print(plot)
+}
+dev.off()
+
+##cca method has the best integration results based on visualization from feature plots
+
+# Next, cell type calling based on marker gene expressions 
+
+VlnPlot(lipo,features=features,group_bym, group_by="cca_clusters",ncol=4)
+
+new.cluster.ids <- c("ductal","ductal","alpha","ductal","acinar","fibroblast","alpha","beta",
+                     "alpha","doublets","alpha","alpha","ductal","beta","beta","ductal",
+                     "delta","alpha","pp","acinar","ductal","beta","alpha","alpha","acinar",
+                     "acinar","unknown","pp","beta","unknown","fibroblast","beta","endothelial",
+                     "alpha","delta","alpha","doublets","fibroblast","beta","ductal","immune",
+                     "immune","endothelial","endothelial","immune"
+)
+
+names(new.cluster.ids) <- levels(lipo$cca_clusters)
+Idents(lipo)=lipo$cca_clusters
+lipo <- RenameIdents(lipo, new.cluster.ids)
+lipo$cell.type <- Idents(lipo)
+
+lipo$cca_clusters <- factor(lipo$cca_clusters,levels = c(0:44))
+
+DimPlot(lipo, reduction = "umap.cca", label = TRUE, pt.size = 0.5) 
+FeaturePlot(lipo, reduction="umap.cca",features = c("percent.mt","nCount_RNA", "nFeature_RNA"))
+lipo <- JoinLayers(lipo)
+
+## Epsilon population has too few cells to be acurately annotated. Use Azimuth reference mapping to enhance epsilon cell annotation. 
+### Final cell type annotation is manual annotation updated with epsilon cell lable from azimuth, azimuth reference files could be downloaded to local from Zenodo from Azimuth Website: https://azimuth.hubmapconsortium.org/references/ or loaded from SeuratData
+
+InstallData("pancreasref.SeuratData")
+lipo <- RunAzimuth(lipo,reference="pancreasref")
+DimPlot(lipo, reduction = "umap.cca", group.by="predicted.annotation.l1",label = TRUE, pt.size = 0.5)
+lipo$cell.type <- as.character(lipo$cell.type)
+lipo$cell.type.final <- ifelse(lipo$predicted.annotation.l1=="epsilon","epsilon",lipo$cell.type) 
+DimPlot(lipo, reduction = "umap.cca", group.by="cell.type.final", label = TRUE, pt.size = 0.5) 
 
 ## features dot plot
-Idents(lipo) <- factor(x=Idents(lipoglucotoxicity),levels=rev(c("alpha","beta","delta","epsilon","pp","ductal","acinar","fibroblast","endothelial","immune","doublets","unknown")))
+Idents(lipo) <- factor(x=Idents(lipo),levels=rev(c("alpha","beta","delta","epsilon","pp","ductal","acinar","fibroblast","endothelial","immune","doublets","unknown")))
 
 features=rev(c("GCG","INS","SST","GHRL","PPY","CFTR","CPA2","SPARC","VWF","PTPRC"))
 DotPlot(lipoglucotoxicity,features = features)
