@@ -227,21 +227,22 @@ InstallData("pancreasref.SeuratData")
 lipo <- RunAzimuth(lipo,reference="pancreasref")
 DimPlot(lipo, reduction = "umap.cca", group.by="predicted.annotation.l1",label = TRUE, pt.size = 0.5)
 lipo$cell.type <- as.character(lipo$cell.type)
-lipo$cell.type.final <- ifelse(lipo$predicted.annotation.l1=="epsilon","epsilon",lipo$cell.type) 
-DimPlot(lipo, reduction = "umap.cca", group.by="cell.type.final", label = TRUE, pt.size = 0.5) 
+lipo$cell.type.final <- ifelse(lipo$predicted.annotation.l1=="epsilon","epsilon",lipo$cell.type)
+Idents(lipo) <- "cell.type.final"
+table(Idents(lipo))
+lipo <- subset(lipo,idents=c("alpha","beta","delta","epsilon","pp","ductal","acinar","fibroblast","endothelial","immune","doublets"))
+
+## UMAP, color code for different cell types
+colors <- c("#4682B4","#CD5C5C", "#5F9EA0", "firebrick","#87CEEB", "#FF8C00", "#48D1CC","#FFD700", "#7B68EE","#FF6347","darkgrey")
+DimPlot(lipo, reduction = "umap.cca",cols = colors,label = TRUE)+labs(x="UMAP1",y="UMAP2")
 
 save(lipo,file="lipo_integrated.rds")
 
 ## features dot plot
-Idents(lipo) <- factor(x=Idents(lipo),levels=rev(c("alpha","beta","delta","epsilon","pp","ductal","acinar","fibroblast","endothelial","immune","doublets","unknown")))
+Idents(lipo) <- factor(x=Idents(lipo),levels=rev(c("alpha","beta","delta","epsilon","pp","ductal","acinar","fibroblast","endothelial","immune","doublets")))
 
 features=rev(c("GCG","INS","SST","GHRL","PPY","CFTR","CPA2","SPARC","VWF","PTPRC"))
 DotPlot(lipoglucotoxicity,features = features)
-
-## color code for different cell types
-colors <- c("#4682B4","#CD5C5C", "#5F9EA0", "firebrick","#87CEEB", "#FF8C00", "#48D1CC","#FFD700", "#7B68EE","#FF6347","darkgrey")
-
-DimPlot(lipo, reduction = "umap.cca",cols = colors,label = TRUE)+labs(x="UMAP1",y="UMAP2")
 
 ## cell percentile and plotting
 
