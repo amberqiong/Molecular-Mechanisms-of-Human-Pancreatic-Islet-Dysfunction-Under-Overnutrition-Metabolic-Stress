@@ -84,7 +84,6 @@ lipo$donor <- sub('_[^_]*$', '',lipo$donor)
 lipo$condition <- sub('.*_', '',lipo$sample)
 lipo$sex <- ifelse(lipo$donor%in%c("SAMN36705973","HP23166","HP23098"),"female","male")
 lipo[['percent.mt']] <- PercentageFeatureSet(lipo, pattern = '^MT-')
-lipo[['percent.mt']] <- PercentageFeatureSet(lipo, pattern = '^MT-')
 
 ```
 
