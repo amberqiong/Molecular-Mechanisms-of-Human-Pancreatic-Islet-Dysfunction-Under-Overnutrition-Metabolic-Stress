@@ -449,14 +449,14 @@ library(ComplexHeatmap)
 
 lipo_subset <- subset(lipo,idents=c("alpha","beta","delta","pp","ductal","acinar"))
 
-## resources from GO, updated in 2024-11-05
+## resources from GO
 ## ATF https://amigo.geneontology.org/amigo/term/GO:0036500,
 ## IRE1 https://amigo.geneontology.org/amigo/term/GO:0036498
 ## PERK https://amigo.geneontology.org/amigo/term/GO:0036499
 
-features=list(ATF_UPR=c("DDIT3","CREBZF","XBP1","ATF6","ATF6B","MBTPS2","MBTPS1"),
-              IRE1_UPR=c("PARP16","PTPN1","DNAJC10","XBP1","ERN1","ERN2","VAPB"),
-              PERK_UPR=c("TMED2","RPAP2","DDIT3","EIF2AK3","EIF2S1","NFE2L2","QRICH1","ATF4"))
+features=list(ATF_UPR=c("DDIT3","CREBZF","XBP1","ATF6","ATF6B","MBTPS2","MBTPS1","MANF"),
+              IRE1_UPR=c("PTPN1",,"XBP1","ERN1","VAPB"),
+              PERK_UPR=c("RPAP2","DDIT3","EIF2AK3","NFE2L2","QRICH1","ATF4"))
 
 lipo_subset <- AddModuleScore(
   object = lipo_subset,
@@ -621,7 +621,7 @@ lipo.endocrine.loom <- as.loom(lipo_subset,filename='lipo.endocrine.loom',verbos
 lipo.endocrine.loom$close_all()
 
 ```
-Secondly, Define and regulons and calculate the cellular regulon enrichment score (AUC).
+Secondly, Identify regulons and calculate the cellular regulon enrichment score (AUC).
 
 ```bash
 
@@ -685,7 +685,7 @@ python add_visualization.py \
 ```
 After getting the AUC values from 11 runs, the data were imported back to seurat to perform the downstream analysis, including
 
-* select the high frequently occured regulons (>5 runs)
+* select the high frequently occured regulons (>=5 runs)
 * identify the differnetially expressed regulons in each endocrine cell types
 
 ```r
@@ -1023,4 +1023,5 @@ pheatmap(yhatSmoothScaled,
          legend = TRUE
 )
 ```
+
 
