@@ -981,7 +981,19 @@ beta_sce_filtered <- fitGAM(beta_sce_filtered, nknots=7, parallel=TRUE)
 ATres <- associationTest(beta_sce_filtered) # testing whether the average gene expression is significantly changed along pseudotime
 ATres$p.adjust <- p.adjust(ATres$pvalue,"fdr")
 
-
+## Plot marker genes in the UPR term
+genelist= c("TMED2","ATF6","HERPUD1","PTPN1","NFE2L2","XBP1","DNAJC10","ATF4","DDIT3","HSPA5",
+            "ERN1","CREBZF","EIF2S1","RPAP2","QRICH1","EIF2AK3","MBTPS2","PARP16","ATF6B","MBTPS1","VAPB")
+scales <- brewer.pal(7,"Accent")[1:2]
+for (i in genelist)
+{
+  gene = i
+  print(plotSmoothers(beta_sce_filtered, assays(beta_sce_filtered)$counts,
+                      gene = gene,
+                      alpha = 1, border = TRUE, curvesCols=scales)+
+          scale_color_manual(values=scales)+
+          ggtitle(gene))
+}
 
 ## Heatmaps of genes whose expression vary over pseudotime
 pseudotime_genes <- rownames(ATres)[
