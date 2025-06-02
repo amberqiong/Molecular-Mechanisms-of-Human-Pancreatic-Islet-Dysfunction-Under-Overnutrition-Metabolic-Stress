@@ -1,6 +1,6 @@
 # Molecular-Mechanisms-of-Human-Pancreatic-Islet-Dysfunction-Under-Overnutrition-Metabolic-Stress
 
-This repository hosts the codes to generate analysis and figures for Molecular Mechanisms of Human Pancreatic Islet Dysfunction Under Overnutrition Metabolic stress, currently under review in Diabetes
+This repository hosts the codes to generate analysis and figures for Molecular Mechanisms of Human Pancreatic Islet Dysfunction Under Overnutrition Metabolic stress, currently under review in Diabetes.
 
 ## Pre-processing
 
@@ -261,6 +261,95 @@ ggplot(counts_data,aes(x=condition,y=count,fill=cell.type.final))+
 
 ```
 
+### integration benchmarking with scib-metrics and scib
+We then use scib-metrics and scib to benchmark our integration method, evaluating both batch effect removal and biological conservation. 
+
+Tutorial https://scib-metrics.readthedocs.io/en/stable/, https://github.com/theislab/scib is followed.
+
+
+```bash 
+# create scib_Python_3.10 env
+conda create -n scib_python_3.10 python=3.10
+conda activate scib_python_3.10
+
+# install packages
+pip install scib
+pip install scib-metrics
+```
+
+```r
+# install R dependency, R 4.4.2 is used
+remotes::install_github('theislab/kBET') 
+
+# convert V5 seurat to h5ad
+
+library(SeuratDisk)
+library(Seurat)
+
+lipo <- readRDS("lipoglucotoxicity.integrated.120823.rds")
+
+lipo[["RNA3"]] <- as(object = lipo[["RNA"]], Class = "Assay")
+DefaultAssay(lipo) <- "RNA3"
+lipo[["RNA"]] <- NULL
+lipo <- RenameAssays(lipo, RNA3 = "RNA")
+Key(lipo[["RNA"]]) <- "rna_"
+
+SaveH5Seurat(lipo, filename = "lipo_new.h5Seurat")
+Convert("lipo_new.h5Seurat", dest = "h5ad")
+```
+Benchmarking integration performance is executed in python
+
+```python
+import scanpy as sc
+import scib
+from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection
+
+# load AnnData
+lipo =sc.read_h5ad("/Users/liguo/Desktop/lipoglucotoxicity/review/cluster_score/lipo_new.h5ad")
+
+# calculate silhousette score only
+label_key = "cell.type.final"
+embed = "X_umap.cca"
+
+sil_score = scib.me.silhouette(
+    lipo,
+    label_key=label_key,
+    embed=embed
+)
+
+print(sil_score)
+
+'''
+bench integration methods using scib-metrics
+''' 
+from scib_metrics.benchmark import Benchmarker, BatchCorrection
+
+bm = Benchmarker(
+    lipo,
+    batch_key="sample",                  # donor or sample 
+    label_key="cell.type.final",        
+    embedding_obsm_keys=["X_umap.cca", "X_harmony","X_umap.rpca","X_umap.mnn","X_umap.unintegrated"],  
+    batch_correction_metrics=BatchCorrection()   
+)
+
+bm.prepare()
+bm.benchmark()
+bm.get_results(min_max_scale=False)
+
+# visulize the results, scaled
+bm.plot_results_table()
+
+# visulize the results, raw
+bm.plot_results_table(min_max_scale=False)
+
+# save dataframes 
+df = bm.get_results(min_max_scale=False)
+df.to_csv("/Users/liguo/Desktop/lipoglucotoxicity/review/cluster_score/with_epsilon_scib_benchmark_results_raw.csv")
+
+```
+*conclusion*: From scib-metrics comparison, cca emerged as the best integration method, consist with visual inspection os UMAP embeddings.
+
+
 ## DEG Analysis
 DEG analysis for all cell types comparing the conditions `GL` vs `Ctrl`. The `FindMarkers` function from the Seurat package is used for differential expression analysis, refer to the [Seurat Differential Expression Vignette](https://satijalab.org/seurat/articles/de_vignette).
 
@@ -347,16 +436,10 @@ down_unique_N <- length(unique(unlist(down_genes)))-sum(down_shared_gene_counts)
 ## for up regulated genes
 
 up_shared_gene_counts <- numeric(length(up_genes) - 1)
-
-# Loop through combinations from 2 to 9
 for (n in 2:length(up_genes)) {
   combs <- combn(names(up_genes), n, simplify = FALSE)
-
-  # For each combination, find the common genes
   for (comb in combs) {
     common_genes <- Reduce(intersect, up_genes[comb])
-
-    # Exclude genes that are shared by more than n data frames
     if (n < length(up_genes)) {
       other_genes <- setdiff(names(up_genes), comb)
       for (other in other_genes) {
@@ -398,7 +481,7 @@ lipo_subset=subset(lipo,idents=c("acinar","alpha","beta","delta","ductal",
 DefaultAssay(lipo_subset)="RNA"
 
 ## In our case, the ranking is not sensitive to the parameter change. tree number only affect the AUC value.
-lipo.augur=calculate_auc(lipoglucotoxicity,
+lipo.augur=calculate_auc(lipo,
   label_col = "condition",cell_type_col = "cell.type.final",
   rf_params=list(trees=500))
 
@@ -738,12 +821,9 @@ selected_regulon <- names(regulon_counts[regulon_counts >= 5])
 ## Standardize all AUC matrices to have the same regulons, filling missing values with NA
 auc_dfs_auc_standardized <- lapply(auc_dfs_auc, function(df) {
   df=as.matrix(df)
-  # Create a new matrix/dataframe with selected regulons
   standardized_df <- matrix(NA, nrow = length(selected_regulon), ncol = ncol(df))
   rownames(standardized_df) <- selected_regulon
   colnames(standardized_df) <- colnames(df)
-  
-  # Fill in values where the regulon exists in the original dataframe
   common_regulons <- intersect(selected_regulon, rownames(df))
   standardized_df[common_regulons, ] <- df[common_regulons, , drop = FALSE]
   
@@ -776,26 +856,24 @@ pheatmap(as.matrix(mean_auc_per_regulon_df_subset),cluster_rows = TRUE,cluster_c
 
 auc_long_df <- lapply(names(auc_dfs_auc_standardized), function(run) {
   df <- auc_dfs_auc_standardized[[run]]
-  df <- as.data.frame(df)  # Ensure it's a dataframe
-  df$regulon <- rownames(df)  # Add regulon names
-  df$run <- run  # Add run ID
+  df <- as.data.frame(df)  
+  df$regulon <- rownames(df)  
+  df$run <- run  
   return(df)
 }) %>%
-  bind_rows() %>%  # Bind all dataframes together
+  bind_rows() %>%  
   pivot_longer(cols = -c(regulon, run), names_to = "cell_type_condition", values_to = "AUC") %>%
   separate(cell_type_condition, into = c("cell_type", "condition"), sep = "-") %>%
-  drop_na(AUC)  # Remove rows with NA values
+  drop_na(AUC)  
 
 # Ensure condition is a factor with correct ordering
 auc_long_df <- auc_long_df %>%
   mutate(condition = factor(condition, levels = c("Ctrl", "PA"))) 
-
-# Pivot wider to get separate columns for PA and Ctrl
+  
 auc_wide_df <- auc_long_df %>%
   pivot_wider(names_from = condition, values_from = AUC) %>%
-  drop_na()  # Ensure paired values exist
+  drop_na() 
 
-# Perform the paired Wilcoxon signed-rank test for each regulon within each cell type
 wilcoxon_results <- auc_wide_df %>%
   group_by(regulon, cell_type) %>%
   summarise(
