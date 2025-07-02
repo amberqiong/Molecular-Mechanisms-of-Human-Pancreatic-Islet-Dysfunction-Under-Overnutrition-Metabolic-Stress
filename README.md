@@ -374,7 +374,7 @@ for (celltype in cell_types){
                           verbose=FALSE,logfc.threshold=0)
 }
 
-## Pseudobulking analysis on all the cell cell_types
+## Pseudobulking analysis on all the cell cell_types, the method used in the manuscript
 
 pseudo_lipo=AggregateExpression(lipo,assays="RNA",return.seurat = T, group.by = c("cell.type.final", "condition", "donor"))
 pseudo_lipo$celltype.condition <- paste(pseudo_lipo$cell.type.final, pseudo_lipo$condition, sep = "_")
@@ -393,82 +393,6 @@ Then,
 * calculate DEG number of each cell type
 * identify the unique DEG or common shared DEG across the cell types
 
-```r
-DEG_1.2=list()
-
-for (j in seq_along(DEG_lipo)){
-  DEG_1.2[[j]] <-
-    subset(DEG_lipo[[j]], abs(avg_log2FC)>log2(1.2) &p_val_adj<0.05)
-}
-
-names(DEG_1.2)=names(DEG_lipo)
-
-## get the number of DEGs for each cell types after filtering
-DEG_1.2_count=lapply(DEG_1.2,nrow)
-
-## find the unique or common (combination from 2 to 9) DEG across all the cell types
-
-up_genes <- list()
-down_genes <- list()
-
-for (name in names(DEG_1.2)) {
-  up_genes[[paste0(name, "_up")]] <- rownames(subset(DEG_1.2[[name]], avg_log2FC > 0))
-  down_genes[[paste0(name, "_down")]] <- rownames(subset(DEG_1.2[[name]], avg_log2FC < 0))
-}
-
-## for down regulated genes
-down_shared_gene_counts <- numeric(length(down_genes) - 1)
-
-for (n in 2:length(down_genes)) {
-  combs <- combn(names(down_genes), n, simplify = FALSE)
-  for (comb in combs) {
-    common_genes <- Reduce(intersect, down_genes[comb])
-    if (n < length(down_genes)) {
-      other_genes <- setdiff(names(down_genes), comb)
-      for (other in other_genes) {
-        common_genes <- setdiff(common_genes, down_genes[[other]])
-      }
-    }
-    down_shared_gene_counts[n-1] <- down_shared_gene_counts[n-1] + length(common_genes)
-  }
-}
-
-down_unique_N <- length(unique(unlist(down_genes)))-sum(down_shared_gene_counts)
-
-## for up regulated genes
-
-up_shared_gene_counts <- numeric(length(up_genes) - 1)
-for (n in 2:length(up_genes)) {
-  combs <- combn(names(up_genes), n, simplify = FALSE)
-  for (comb in combs) {
-    common_genes <- Reduce(intersect, up_genes[comb])
-    if (n < length(up_genes)) {
-      other_genes <- setdiff(names(up_genes), comb)
-      for (other in other_genes) {
-        common_genes <- setdiff(common_genes, up_genes[[other]])
-      }
-    }
-
-    # Count the unique genes shared by exactly n data frames
-    up_shared_gene_counts[n-1] <- up_shared_gene_counts[n-1] + length(common_genes)
-  }
-}
-
-up_unique_N <- length(unique(unlist(up_genes)))-sum(up_shared_gene_counts)
-
-## generate the plot
-
-df <- data.frame(cell_type_N=rep(1:9,2),
-  Direction=c(rep("up",9),rep("down",9)),
-  Number=c(up_unique_N,up_shared_gene_counts,down_unique_N,down_shared_gene_counts)
-
-ggplot(df, aes(x = Celltype_N, y = Number, fill = Direction)) +
-  geom_bar(stat = "identity", position = "dodge") +  # Dodge to place bars side by side
-  labs(x = "Number of Cell Types", y = "Gene Count", fill = "Direction") +
-  scale_fill_manual(values = c("up" = "firebrick", "down" = "steelblue"))+
-  theme_classic()
-
-```
 
 ## Augur Analysis
 Augur is a R package to estimate the cell sensitivity to the env disturbation, for the details please refer to https://github.com/neurorestore/Augur
