@@ -386,6 +386,7 @@ for (celltype in cell_types){
   DEG_lipo[[celltype]] <- FindMarkers(pseudo_lipo,
                           ident.1=ident_1,ident.2=ident_2,
                           test.use="DESeq2")
+}
 ```
 Then,
 
