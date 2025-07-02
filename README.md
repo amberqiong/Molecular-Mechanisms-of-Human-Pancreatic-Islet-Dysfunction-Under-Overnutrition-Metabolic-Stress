@@ -288,7 +288,7 @@ remotes::install_github('theislab/kBET')
 library(SeuratDisk)
 library(Seurat)
 
-lipo <- readRDS("lipoglucotoxicity.integrated.120823.rds")
+lipo <- readRDS("lipo.integrated.rds")
 
 lipo[["RNA3"]] <- as(object = lipo[["RNA"]], Class = "Assay")
 DefaultAssay(lipo) <- "RNA3"
@@ -358,6 +358,7 @@ DEG analysis for all cell types comparing the conditions `GL` vs `Ctrl`. The `Fi
 ```r
 library(Seurat)
 
+lipo <- readRDS("lipo.integrated.rds")
 lipo$celltype.condition=paste(lipo$cell.type.final,lipo$condition,sep="_")
 Idents(lipo)="celltype.condition"
 DefaultAssay(lipo) <- "RNA"
@@ -402,6 +403,7 @@ library(tidyverse)
 library(Seurat)
 library(Augur)
 
+lipo <- readRDS("lipo.integrated.rds")
 lipo_subset=subset(lipo,idents=c("acinar","alpha","beta","delta","ductal",
                             "endothelial","fibroblast","immune","pp"))
 DefaultAssay(lipo_subset)="RNA"
@@ -425,6 +427,8 @@ library(enrichplot)
 library(ggplot2)
 library(org.Hs.eg.db)
 library(DOSE)
+
+lipo <- readRDS("lipo.integrated.rds")
 
 enrich_GO_for_genes <- function(gene_list) {
   enrichGO(
@@ -456,6 +460,7 @@ library(dplyr)
 library(tibble)
 library(ComplexHeatmap)
 
+lipo <- readRDS("lipo.integrated.rds")
 lipo_subset <- subset(lipo,idents=c("alpha","beta","delta","pp","ductal","acinar"))
 
 ## resources from GO
@@ -510,6 +515,7 @@ library(CellChat)
 library(patchwork)
 library(Seurat)
 
+lipo <- readRDS("lipo.integrated.rds")
 lipo.subset=subset(lipo,idents=c("acinar","alpha","beta","delta","ductal","epsilon",
                             "endothelial","fibroblast","immune","pp"))
 set.seed(123)
@@ -625,6 +631,7 @@ library(Seurat)
 library(SeuratDisk)
 library(loomR)
 
+lipo <- readRDS("lipo.integrated.rds")
 lipo_subset <- subset(lipo,idents=c("alpha","beta","delta","epsilon","pp"))
 lipo.endocrine.loom <- as.loom(lipo_subset,filename='lipo.endocrine.loom',verbose=FALSE)
 lipo.endocrine.loom$close_all()
@@ -951,7 +958,7 @@ library(tradeSeq)
 library(cowplot)
 
 # Selecting beta cells
-Idents(lipo)=lipo$cell.type.final
+lipo <- readRDS("lipo.integrated.rds")
 beta = subset(lipo,idents="beta")
 
 # Converting to singleCellExperiment
