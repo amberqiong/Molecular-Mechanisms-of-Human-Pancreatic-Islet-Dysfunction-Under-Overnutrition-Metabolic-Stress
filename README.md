@@ -390,9 +390,8 @@ for (celltype in cell_types){
 ```
 Then,
 
-* DEG Filtering |FC|>1.2 & p.adj < 0.05
+* DEG statistical threshold p.adj < 0.1
 * calculate DEG number of each cell type
-* identify the unique DEG or common shared DEG across the cell types
 
 
 ## Augur Analysis
