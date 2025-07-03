@@ -469,10 +469,10 @@ for (ct in names(rank_list)) {
   # Store in your results list
   fgsea_results[[ct]] <- fgseaRes
 }
-
-
-# Then each GSEA results were ranked by pval. Top 10 terms from each cell types were extracted and used for plotting the pathway heatmap 
 ```
+
+Then each GSEA results were ranked by pval. Top 10 terms from each cell types were extracted and used for plotting the pathway heatmap 
+
 ## UPR module scores calculation
 
 The `AddModuleScore` function is used to calculate the average expression level of UPR pathways in each cells, refer to https://satijalab.org/seurat/reference/addmodulescore
