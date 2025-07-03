@@ -419,11 +419,11 @@ plot_umap(lipo.augur, lipo,reduction = "umap.cca",cell_type_col = "cell.type.fin
 
 ```
 
-## Pathway enrichment
+## Gene set enrichment analysis
 
 ```r
-library(clusterProfiler)
-library(enrichplot)
+library(fgsea)
+library(data.table)
 library(ggplot2)
 library(org.Hs.eg.db)
 library(DOSE)
