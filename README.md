@@ -380,14 +380,17 @@ for (celltype in cell_types){
 pseudo_lipo=AggregateExpression(lipo,assays="RNA",return.seurat = T, group.by = c("cell.type.final", "condition", "donor"))
 pseudo_lipo$celltype.condition <- paste(pseudo_lipo$cell.type.final, pseudo_lipo$condition, sep = "_")
 Idents(pseudo_lipo)="celltype.condition"
+celltypes <- unique(pseudo_lipoglucotoxicity@meta.data$cell.type.final)
+celltypes <- celltypes[celltypes!="doublets"]
 DEG_lipo_bulk=list()
-for (celltype in cell_types){
-  ident_1 <- paste0(cell_type, "_GL")
-  ident_2 <- paste0(cell_type, "_Ctrl")
+for (celltype in celltypes){
+  ident_1 <- paste0(celltype, "_GL")
+  ident_2 <- paste0(celltype, "_Ctrl")
   DEG_lipo[[celltype]] <- FindMarkers(pseudo_lipo,
                           ident.1=ident_1,ident.2=ident_2,
                           test.use="DESeq2")
 }
+saveRDS(DEG_lipo,file="DEG_lipo.rds")
 ```
 Then,
 
@@ -425,30 +428,50 @@ plot_umap(lipo.augur, lipo,reduction = "umap.cca",cell_type_col = "cell.type.fin
 library(fgsea)
 library(data.table)
 library(ggplot2)
-library(org.Hs.eg.db)
-library(DOSE)
 
-lipo <- readRDS("lipo.integrated.rds")
+DEG_lipo <- readRDS("DEG_lipo.rds")
 
-enrich_GO_for_genes <- function(gene_list) {
-  enrichGO(
-    gene = gene_list,
-    OrgDb = "org.Hs.eg.db",
-    ont = "BP",
-    keyType = "SYMBOL",
-    qvalueCutoff = 0.05
+# use sign of log2FC * -log10(p value) for ranking
+
+rank_list <- lapply(names(DEG_lipo), function(ct) {
+  de <- DEG_lipo[[ct]]
+  de$gene <- rownames(de)
+  de$rank <- sign(de$avg_log2FC) * (-log10(de$p_val))
+  de[, c("gene", "rank")]
+})
+names(rank_list) <- names(DEG_lipo)
+
+hallmarks <- gmtPathways("msigdb_07022025/h.all.v2025.1.Hs.symbols.gmt")
+fgsea_results <- list()
+
+for (ct in names(rank_list)) {
+  rl <- rank_list[[ct]]
+  
+  # Remove NAs 
+  rl <- na.omit(rl)
+  
+  # Make named ranking vector
+  rl1 <- rl$rank
+  names(rl1) <- rl$gene
+  
+  # hallmarks
+  fgseaRes <- fgsea(
+    pathways = hallmarks,
+    stats = rl1,
+    minSize = 15,
+    maxSize = 5000,
+    eps = 0.0
   )
+  
+  # Order by pval
+  fgseaRes <- fgseaRes[order(fgseaRes$pval), ]
+  
+  # Store in your results list
+  fgsea_results[[ct]] <- fgseaRes
 }
 
-up_GO_results <- lapply(up_genes, function(gene_list) {
-  lapply(gene_list, enrich_GO_for_genes)
-})
 
-down_GO_results <- lapply(down_genes, function(gene_list) {
-  lapply(gene_list, enrich_GO_for_genes)
-})
-
-## Then each GO results were exported and further used revigo(http://revigo.irb.hr/) to pick the parental terms
+# Then each GSEA results were ranked by pval. Top 10 terms from each cell types were extracted and used for plotting the pathway heatmap 
 ```
 ## UPR module scores calculation
 
