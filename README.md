@@ -375,7 +375,7 @@ for (celltype in cell_types){
                           verbose=FALSE,logfc.threshold=0)
 }
 
-## Pseudobulking analysis on all the cell cell_types, the method used in the manuscript
+## Pseudobulking analysis on all the cell from each donor based on cell types and condition, the method used in the manuscript
 
 pseudo_lipo=AggregateExpression(lipo,assays="RNA",return.seurat = T, group.by = c("cell.type.final", "condition", "donor"))
 pseudo_lipo$celltype.condition <- paste(pseudo_lipo$cell.type.final, pseudo_lipo$condition, sep = "_")
