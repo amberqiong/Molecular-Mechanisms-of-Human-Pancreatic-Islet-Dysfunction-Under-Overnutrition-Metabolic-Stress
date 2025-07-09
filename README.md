@@ -382,13 +382,17 @@ pseudo_lipo$celltype.condition <- paste(pseudo_lipo$cell.type.final, pseudo_lipo
 Idents(pseudo_lipo)="celltype.condition"
 celltypes <- unique(pseudo_lipoglucotoxicity@meta.data$cell.type.final)
 celltypes <- celltypes[celltypes!="doublets"]
-DEG_lipo_bulk=list()
+DEG_lipo=list()
 for (celltype in celltypes){
   ident_1 <- paste0(celltype, "_GL")
   ident_2 <- paste0(celltype, "_Ctrl")
   DEG_lipo[[celltype]] <- FindMarkers(pseudo_lipo,
                           ident.1=ident_1,ident.2=ident_2,
-                          test.use="DESeq2")
+                          test.use="DESeq2",
+                          logfc.threshold=0,
+                          min.pct = 0)
+  DEG_lipo[[celltype]]$p_val_adj = p.adjust(DEG_lipo[[celltype]]$p_val, method='fdr')
+# BH correction on the p-values following the convention of bulk RNA-seq 
 }
 saveRDS(DEG_lipo,file="DEG_lipo.rds")
 ```
