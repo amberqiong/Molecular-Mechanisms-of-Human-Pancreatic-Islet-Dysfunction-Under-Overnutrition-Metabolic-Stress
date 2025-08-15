@@ -2,6 +2,8 @@
 
 This repository hosts the codes to generate analysis and figures for Molecular Mechanisms of Human Pancreatic Islet Dysfunction Under Overnutrition Metabolic stress.
 
+The work is published in Diabetes: https://doi.org/10.2337/db24-1038
+
 Some code scaffolding was generated using ChatGPT and reviewed by the authors.
 
 ## Pre-processing
